@@ -1,0 +1,11 @@
+# Copy to:
+#
+# test/settings.conf
+#
+# and customize locally.
+#
+# Do NOT commit test/settings.conf
+
+SNAPDIR="/mnt/btrfs_pool/btrbk_snapshots"
+
+PREFIX="/tmp/btrfs-churn-test"

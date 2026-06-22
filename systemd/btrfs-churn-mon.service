@@ -1,0 +1,7 @@
+[Unit]
+Description=Btrfs Churn Monitor
+
+[Service]
+Type=oneshot
+
+ExecStart=/opt/btrfs-churn-mon/bin/monitor-run.sh home
