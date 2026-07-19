@@ -9,10 +9,9 @@ SNAPNAME="${1:?snapshot name required}"
 
 shift || true
 
-
+source "${ROOT}/lib/load-config.rc"
 
 REPORTROOT="${PREFIX}/reports/${SNAPNAME}"
-source "${ROOT}/lib/load-config.rc"
 mkdir -p "$REPORTROOT"
 
 "${ROOT}/lib/monitor-find-pairs.sh" \

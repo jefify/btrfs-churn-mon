@@ -37,7 +37,7 @@ case "$MODE" in
 esac
 
 new_ts="$(basename "$NEW")"
-new_ts="${new_ts#${SNAPNAME}.}"
+new_ts="${new_ts#"${SNAPNAME}".}"
 
 new_epoch="$(date -d "${new_ts:0:8} ${new_ts:9:2}:${new_ts:11:2}:${new_ts:13:2}" +%s)"
 
@@ -49,7 +49,7 @@ do
     [[ "$SNAP" == "$NEW" ]] && continue
 
     ts="$(basename "$SNAP")"
-    ts="${ts#${SNAPNAME}.}"
+    ts="${ts#"${SNAPNAME}".}"
 
     epoch="$(date -d "${ts:0:8} ${ts:9:2}:${ts:11:2}:${ts:13:2}" +%s)"
 

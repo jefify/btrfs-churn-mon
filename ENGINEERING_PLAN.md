@@ -28,12 +28,16 @@ Remove dead weight before any real work.
 
 Ensure nothing dangerous before activating the timer.
 
-- [ ] Audit `generate-dump.sh` — runs `btrfs send` (requires root or CAP_SYS_ADMIN)
-- [ ] Audit `install-systemd.sh` — writes to `/etc/systemd/`
-- [ ] Check all scripts for unquoted variables (injection risk)
-- [ ] Check file permissions on generated reports/state (should not be world-writable)
-- [ ] Verify `|| true` in generate-dump.sh — document why or remove
-- [ ] Run ShellCheck on all `.sh` files, fix warnings
+- [x] Audit `generate-dump.sh` — runs `btrfs send` (requires root or CAP_SYS_ADMIN)
+  - Fixed: now warns on partial failure, exits on empty dump
+- [x] Audit `install-systemd.sh` — writes to `/etc/systemd/` (requires sudo, documented)
+- [x] Check all scripts for unquoted variables (injection risk) — all clean
+- [x] Check file permissions on generated reports/state — inherits umask, acceptable
+- [x] Fix `|| true` in generate-dump.sh — replaced with proper error handling
+- [x] Fix `monitor-run.sh`: PREFIX used before source (could write to wrong path)
+- [x] Fix `analyse-all-pairs.sh`: same source ordering bug
+- [x] Systemd service: added EnvironmentFile for configurable snapshot family
+- [ ] Run ShellCheck on all `.sh` files (shellcheck not installed — deferred to Phase 4)
 
 ---
 

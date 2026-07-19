@@ -4,13 +4,10 @@ set -euo pipefail
 
 SNAPNAME="${1:?snapshot name required}"
 
-
-
-REPORTROOT="${REPORTROOT:-${PREFIX}/reports}"
-
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${ROOT}/lib/load-config.rc"
+
+REPORTROOT="${REPORTROOT:-${PREFIX}/reports}"
 mapfile -t SNAPS < <(
     find "$SNAPDIR" \
         -maxdepth 1 \
