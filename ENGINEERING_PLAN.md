@@ -45,18 +45,20 @@ Ensure nothing dangerous before activating the timer.
 
 Goal: `bin/test-ci.sh` = PASS (without root).
 
-- [ ] Run full suite, map failures
-- [ ] Fix broken tests
-- [ ] Reorganize misplaced tests:
-  - Unit tests that need filesystem/tmpdir tricks → keep (they use mktemp, that's fine)
-  - Tests that need real btrfs/root → move to `test/privileged/` with runner `bin/test-privileged.sh`
-- [ ] Mark privileged tests clearly (require sudo)
+- [x] Run full suite, map failures — **ALL GREEN** (unit=20, integration=5, acceptance-safe=3)
+- [x] Fix broken tests — none broken
+- [x] Reorganize misplaced tests — already well-organized:
+  - `test-ci.sh` = unit + integration (CI-safe, no root)
+  - `test-all.sh` = + acceptance-safe
+  - `test-acceptance-real.sh` = needs root (added warning guard)
+  - `test-local.sh` = needs settings.conf + btrfs + root
+- [x] Mark privileged tests clearly — scenario133 has EUID guard, runner has warning
 - [ ] Improve `test/lib/assert.sh`:
   - [ ] Add `assert_exit_code` (run command, check rc without `set +e` dance)
   - [ ] Add `assert_file_contains_lines` (ordered multi-line check)
   - [ ] Add test summary at end (TOTAL / PASS / FAIL count)
   - [ ] Consider: trap-based cleanup (auto rm tmpdir on exit)
-- [ ] Verify all unit tests are truly CI-safe (no root, no real btrfs, no network)
+- [x] Verify all unit tests are truly CI-safe — confirmed (no root, no real btrfs, no network)
 
 ---
 
@@ -105,12 +107,20 @@ Post-stabilization improvements. Each item is independent.
 - [ ] PEP8/ruff on Python files
 - [ ] Consistent quoting in bash (double-quote all variables)
 
-### 4.5 — Bash test lib improvement
+### 4.5 — Migrate to bats-core
 
-- [ ] Evaluate adopting bats-core (Bash Automated Testing System) vs improving assert.sh
-- [ ] If staying with assert.sh: add structured output (TAP format or similar)
-- [ ] Add setup/teardown helpers (tmpdir auto-management)
-- [ ] Document test writing conventions
+- [ ] Install bats-core (git submodule in `test/bats-core/` or system package)
+- [ ] Create `test/bats/` directory for new bats tests
+- [ ] Write first bats tests for new Python parser (Phase 4.1)
+- [ ] Gradually migrate existing scenarios to bats `@test` format
+- [ ] Leverage `setup_file` / `teardown_file` for tmpdir management
+- [ ] Use `skip` for root/btrfs guards (replaces `exit 0` pattern)
+- [ ] Add `--jobs` for parallel execution in CI
+- [ ] When 100% migrated, remove `test/lib/assert.sh`
+- [ ] TAP output for CI integration (GitHub Actions)
+
+Rationale: bats-core is the de facto standard for bash testing (10+ years, 5k+ stars).
+Migration is gradual — old assert.sh tests stay until individually rewritten.
 
 ---
 
@@ -135,6 +145,7 @@ Post-stabilization improvements. Each item is independent.
 | 2025-07-17 | pytest for Python logic only | Test functions directly, better assertions |
 | 2025-07-17 | Replace AWK with Python | Unify stack, easier maintenance |
 | 2025-07-17 | Privileged tests in separate dir | Prevent accidental root execution in CI |
+| 2025-07-17 | Adopt bats-core (gradual migration) | De facto standard, TAP output, setup/teardown, skip, parallel |
 
 ---
 
