@@ -18,4 +18,6 @@ TMP="$(mktemp "${STATEFILE}.XXXX")"
 
 printf '%s\n' "$SNAPID" > "$TMP"
 
+chmod 644 "$TMP"
+
 mv "$TMP" "$STATEFILE"
