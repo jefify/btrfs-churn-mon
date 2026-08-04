@@ -1,0 +1,11 @@
+# btrfs-churn-mon configuration
+#
+# Copy to: etc/btrfs-churn-mon.conf
+# Do NOT commit etc/btrfs-churn-mon.conf (it's in .gitignore)
+#
+# These values can also be set via environment variables.
+
+: "${PREFIX:=/opt/btrfs-churn-mon}"
+: "${SNAPDIR:=/mnt/btrfs_pool/btrbk_snapshots}"
+
+DEFAULT_CATCHUP_LIMIT=100

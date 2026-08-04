@@ -2,43 +2,16 @@
 
 set -euo pipefail
 
-FAILS=0
+# ============================================
+# test-all.sh — Run everything (CI + real)
+# Requires: root + test/settings.conf + btrfs
+# ============================================
 
-run_suite() {
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-    local NAME="$1"
-    local CMD="$2"
-
-    echo
-    echo
-    echo "##################################"
-    echo "$NAME"
-    echo "##################################"
-
-    if bash "$CMD"
-    then
-        :
-    else
-        ((FAILS++))
-    fi
-}
-
-run_suite \
-    UNIT \
-    bin/test-unit.sh
-
-run_suite \
-    INTEGRATION \
-    bin/test-integration.sh
-
-run_suite \
-    ACCEPTANCE_SAFE \
-    bin/test-acceptance-safe.sh
+echo "=== CI tests (safe) ==="
+bash "${SCRIPT_DIR}/test-ci.sh"
 
 echo
-echo "##################################"
-echo "TOTAL FAILS=$FAILS"
-echo "##################################"
-
-exit "$FAILS"
-
+echo "=== Real tests (privileged) ==="
+bash "${SCRIPT_DIR}/test-real.sh"

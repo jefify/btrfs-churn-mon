@@ -24,3 +24,6 @@ sandbox/
 
 # Local settings for test
 test/settings.conf
+
+# Local config (copy from etc/btrfs-churn-mon.conf.example)
+etc/btrfs-churn-mon.conf

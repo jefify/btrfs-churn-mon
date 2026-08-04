@@ -66,6 +66,24 @@ Goal: `bin/test-ci.sh` = PASS (without root).
 
 After CI green, activate monitoring on real system.
 
+### 3.1 — Consolidate test runners
+
+Reduce from 8 runners to 3:
+
+- [x] Create `bin/test-real.sh` (root guard + settings.conf guard + local + acceptance-real)
+- [x] Update `bin/test-ci.sh` to include acceptance-safe (was only unit + integration)
+- [x] Simplify `bin/test-all.sh` to: `test-ci.sh` + `test-real.sh`
+- [x] Remove redundant runners: `test-unit.sh`, `test-integration.sh`, `test-acceptance-safe.sh`, `test-acceptance-real.sh`, `test-local.sh`
+
+Final structure:
+| Runner | CI-safe | Requires |
+|--------|:---:|---|
+| `test-ci.sh` | ✅ | Nothing (fixtures only) |
+| `test-real.sh` | ❌ | root + test/settings.conf + btrfs |
+| `test-all.sh` | ❌ | root + test/settings.conf + btrfs |
+
+### 3.2 — Manual validation
+
 - [ ] Run `bin/bootstrap.sh` against real snapshots
 - [ ] Run `bin/monitor-run.sh` for one family
 - [ ] Install timer (`install-systemd.sh --install`)
