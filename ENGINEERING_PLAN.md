@@ -107,13 +107,13 @@ Strategy: split into "install logic works" (automated) vs "my system is healthy"
 
 ### 3.3 — Manual validation
 
-- [ ] Create `etc/btrfs-churn-mon.conf` from example
-- [ ] Run `sudo bash bin/test-real.sh`
-- [ ] Run `sudo bin/bootstrap.sh` against real snapshots
-- [ ] Run `sudo bin/monitor-run.sh home`
-- [ ] Install timer (`sudo bin/install-systemd.sh --install`)
-- [ ] Run `bin/verify-install.sh` to confirm health
-- [ ] Validate aggregate report (`bin/generate-mon-report.sh --stdout`)
+- [x] Create `etc/btrfs-churn-mon.conf` from example
+- [x] Run `sudo bash bin/test-real.sh` — PASS (0 fails)
+- [x] Run `sudo bin/bootstrap.sh` — 2 families (home, raiz), 108 reports
+- [x] Run `sudo bin/monitor-run.sh home` — idempotent (0 new reports)
+- [x] Install timer (`sudo bin/install-systemd.sh --install`) — active, 24h interval
+- [x] Run `bin/verify-install.sh` — all checks passed
+- [x] Run `bin/verify-bootstrap.sh` — all checks passed
 
 ---
 
