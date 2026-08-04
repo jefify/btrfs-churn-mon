@@ -59,8 +59,8 @@ echo "[2/4] parse"
 {
     echo -e "BYTES\tPATH"
 
-    awk \
-        -f "${ROOT}/lib/parse-churn.awk" \
+    python3 \
+        "${ROOT}/lib/parse_churn.py" \
         "$DUMPFILE" \
         | sort -nr
 

@@ -9,8 +9,8 @@ TMP=$(mktemp -d)
 : > "$TMP/send.dump"
 
 OUT=$(
-awk \
-    -f lib/parse-churn.awk \
+python3 \
+    lib/parse_churn.py \
     "$TMP/send.dump"
 )
 

@@ -18,8 +18,8 @@ cat > "$TMP/expected.tsv" << TSV
 300	user/file3
 TSV
 
-awk \
-    -f lib/parse-churn.awk \
+python3 \
+    lib/parse_churn.py \
     "$TMP/send.dump" \
 | sort > "$TMP/actual.tsv"
 

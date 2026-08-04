@@ -152,18 +152,35 @@ Post-stabilization improvements. Each item is independent.
 
 ### 4.5 — Migrate to bats-core
 
-- [ ] Install bats-core (git submodule in `test/bats-core/` or system package)
-- [ ] Create `test/bats/` directory for new bats tests
-- [ ] Write first bats tests for new Python parser (Phase 4.1)
-- [ ] Gradually migrate existing scenarios to bats `@test` format
+Test directory structure (target):
+```
+tests/
+├── python/          # pytest (lib functions)
+│   └── test_*.py
+└── bash/            # bats-core (script-level tests)
+    ├── unit/*.bats
+    ├── integration/*.bats
+    └── acceptance/*.bats
+```
+
+Current state: `test/` contains legacy bash tests (assert.sh).
+These will be transcribed to `tests/bash/` as `.bats` files when bats-core is adopted.
+Until then, `test/` = legacy (don't add new tests there), `tests/python/` = new pytest tests.
+
+Migration plan:
+- [ ] Install bats-core (git submodule in `tests/bats-core/` or system package)
+- [ ] Create `tests/bash/` directory structure
+- [ ] Transcribe existing `test/unit/*.sh` → `tests/bash/unit/*.bats`
+- [ ] Transcribe existing `test/integration/*.sh` → `tests/bash/integration/*.bats`
+- [ ] Transcribe existing `test/acceptance/` → `tests/bash/acceptance/*.bats`
 - [ ] Leverage `setup_file` / `teardown_file` for tmpdir management
 - [ ] Use `skip` for root/btrfs guards (replaces `exit 0` pattern)
-- [ ] Add `--jobs` for parallel execution in CI
-- [ ] When 100% migrated, remove `test/lib/assert.sh`
+- [ ] Update runners (`test-ci.sh`, `test-real.sh`) to call bats
+- [ ] When 100% migrated, remove `test/` directory + `test/lib/assert.sh`
 - [ ] TAP output for CI integration (GitHub Actions)
 
 Rationale: bats-core is the de facto standard for bash testing (10+ years, 5k+ stars).
-Migration is gradual — old assert.sh tests stay until individually rewritten.
+Migration is gradual — old assert.sh tests stay in `test/` until individually rewritten.
 
 ---
 

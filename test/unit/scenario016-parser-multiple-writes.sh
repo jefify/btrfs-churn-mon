@@ -13,8 +13,8 @@ clone ./foo/bar len=300
 DUMP
 
 OUT=$(
-awk \
-    -f lib/parse-churn.awk \
+python3 \
+    lib/parse_churn.py \
     "$TMP/send.dump"
 )
 
