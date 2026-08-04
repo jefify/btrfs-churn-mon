@@ -123,6 +123,8 @@ Post-stabilization improvements. Each item is independent.
 
 ### 4.1 — Replace AWK with Python
 
+✅ **Done** (commit `4cc9aec`). Design doc: [docs/archived/plan-python-parse-churn.md](archived/plan-python-parse-churn.md)
+
 - [ ] Create `lib/parse_churn.py` (equivalent to `parse-churn.awk`)
 - [ ] Add pytest tests for the new parser
 - [ ] Update `analyse-churn.sh` to call Python instead of AWK

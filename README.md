@@ -68,44 +68,38 @@ systemd/
     service and timer
 
 test/
-    unit
-    integration
-    acceptance
-    local
+    unit, integration, acceptance (legacy bash tests)
+
+tests/
+    python/     (pytest)
 ```
 
 ---
 
 ## Test Suites
 
-Run all CI-safe tests:
+Run CI-safe tests (no root, no btrfs):
 
 ```bash
-./bin/test-all.sh
+./bin/test-ci.sh
 ```
 
-Run unit tests:
+Run privileged tests (root + real btrfs):
 
 ```bash
-./bin/test-unit.sh
+sudo ./bin/test-real.sh
 ```
 
-Run integration tests:
+Run everything:
 
 ```bash
-./bin/test-integration.sh
+sudo ./bin/test-all.sh
 ```
 
-Run acceptance-safe tests:
+Run Python tests:
 
 ```bash
-./bin/test-acceptance-safe.sh
-```
-
-Run acceptance-real tests:
-
-```bash
-./bin/test-acceptance-real.sh
+python3 -m pytest
 ```
 
 ---
@@ -185,6 +179,13 @@ Recent reports only:
 ./bin/generate-mon-report.sh \
     --limit 24h
 ```
+
+---
+
+## Documentation
+
+- [Installation](docs/INSTALL.md) — requirements, setup, verification
+- [Engineering Plan](docs/ENGINEERING_PLAN.md) — development roadmap and decisions
 
 ---
 
