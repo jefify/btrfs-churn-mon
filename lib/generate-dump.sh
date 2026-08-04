@@ -6,16 +6,17 @@ OLD="${1:?old snapshot required}"
 NEW="${2:?new snapshot required}"
 DUMPFILE="${3:?dump file required}"
 
-# btrfs send can fail partially but still produce usable output.
-# We capture the exit code and warn, but only fail if dump is empty.
-if ! btrfs send -p "$OLD" "$NEW" \
+# btrfs send | btrfs receive --dump can exit non-zero even when
+# producing valid output (e.g. partial streams, pipe signals).
+# We disable pipefail temporarily and check the result manually.
+set +o pipefail
+btrfs send -p "$OLD" "$NEW" 2>/dev/null \
     | btrfs receive --dump > "$DUMPFILE" 2>/dev/null
-then
-    echo "WARNING: btrfs send/receive exited non-zero" >&2
-fi
+PIPE_RC=$?
+set -o pipefail
 
 if [[ ! -s "$DUMPFILE" ]]
 then
-    echo "ERROR: dump file is empty — btrfs send failed completely" >&2
+    echo "ERROR: dump file is empty — btrfs send failed (rc=$PIPE_RC)" >&2
     exit 1
 fi
