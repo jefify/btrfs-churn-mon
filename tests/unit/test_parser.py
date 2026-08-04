@@ -9,15 +9,12 @@ Contract:
 """
 
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
 import pytest
 
-# Import will fail until implementation exists (RED phase)
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
-from parse_churn import parse_line, aggregate, format_output
+from src.parser import parse_line, aggregate, format_output
 
 
 # --- parse_line tests ---
