@@ -134,22 +134,30 @@ case "$MODE" in
             "${ROOT}/systemd/${SERVICE_NAME}.timer" \
             "${SYSTEMD_DIR}/"
 
-        systemctl daemon-reload
+        # Only interact with systemd if using real system path
+        if [[ "$SYSTEMD_DIR" == "/etc/systemd/system" ]]
+        then
+            systemctl daemon-reload
 
-        systemctl enable \
-            "${SERVICE_NAME}.timer"
+            systemctl enable \
+                "${SERVICE_NAME}.timer"
 
-        systemctl start \
-            "${SERVICE_NAME}.timer"
+            systemctl start \
+                "${SERVICE_NAME}.timer"
 
-        echo
-        echo "Installed."
-        echo
+            echo
+            echo "Installed."
+            echo
 
-        systemctl status \
-            "${SERVICE_NAME}.timer" \
-            --no-pager \
-            || true
+            systemctl status \
+                "${SERVICE_NAME}.timer" \
+                --no-pager \
+                || true
+        else
+            echo
+            echo "Installed to: $SYSTEMD_DIR (systemctl skipped — non-standard path)"
+            echo
+        fi
 
         ;;
 

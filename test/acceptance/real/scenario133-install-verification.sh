@@ -4,26 +4,26 @@ set -euo pipefail
 
 source test/lib/assert.sh
 
-if [[ $EUID -ne 0 ]]
-then
-    echo "SKIP: root required"
-    exit 0
-fi
+# Test install logic WITHOUT touching real systemd.
+# Uses SYSTEMD_DIR override to write to tmpdir.
 
-./bin/install-systemd.sh \
-    --install
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
 
-assert_rc 0 true
+export SYSTEMD_DIR="$TMP/systemd"
+mkdir -p "$SYSTEMD_DIR"
 
-systemctl cat \
-    btrfs-churn-mon.service \
-    >/dev/null
+./bin/install-systemd.sh --install
 
-pass "service installed"
+assert_file_exists "$SYSTEMD_DIR/btrfs-churn-mon.service"
+assert_file_exists "$SYSTEMD_DIR/btrfs-churn-mon.timer"
 
-systemctl cat \
-    btrfs-churn-mon.timer \
-    >/dev/null
+assert_contains \
+    "$SYSTEMD_DIR/btrfs-churn-mon.service" \
+    "monitor-run.sh"
 
-pass "timer installed"
+assert_contains \
+    "$SYSTEMD_DIR/btrfs-churn-mon.timer" \
+    "OnUnitActiveSec"
 
+pass "install logic verified (isolated)"

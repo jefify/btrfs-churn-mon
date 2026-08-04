@@ -82,13 +82,38 @@ Final structure:
 | `test-real.sh` | ❌ | root + test/settings.conf + btrfs |
 | `test-all.sh` | ❌ | root + test/settings.conf + btrfs |
 
-### 3.2 — Manual validation
+### 3.2 — Isolate install tests (SYSTEMD_DIR override)
 
-- [ ] Run `bin/bootstrap.sh` against real snapshots
-- [ ] Run `bin/monitor-run.sh` for one family
-- [ ] Install timer (`install-systemd.sh --install`)
-- [ ] Verify timer fires and produces reports
-- [ ] Validate aggregate report (`generate-mon-report.sh --stdout`)
+The install scenario (133) currently installs to real `/etc/systemd/system/`.
+This is unsafe for automated testing on a desktop machine.
+
+Strategy: split into "install logic works" (automated) vs "my system is healthy" (manual).
+
+- [x] Modify `scenario133` to use `SYSTEMD_DIR=/tmp/systemd-test-$$`:
+  - Validates files are correctly copied
+  - Validates install script exits 0
+  - Does NOT touch real systemd
+  - Skip `systemctl` commands when SYSTEMD_DIR is not `/etc/systemd/system`
+- [x] Modify `scenario134` (monitor-after-bootstrap) — already uses mktemp, safe as-is
+- [x] Create `bin/verify-install.sh` — post-install health check (read-only, manual):
+  - Checks timer exists and is enabled
+  - Checks timer has fired recently
+  - Checks reports/state directories exist
+  - Exit 0 = healthy, Exit 1 = problem found
+- [x] Create `bin/verify-bootstrap.sh` — post-bootstrap health check (read-only, manual):
+  - Checks state directory has .last files for each family
+  - Checks reports directory has at least one report per family
+  - Checks no empty reports
+
+### 3.3 — Manual validation
+
+- [ ] Create `etc/btrfs-churn-mon.conf` from example
+- [ ] Run `sudo bash bin/test-real.sh`
+- [ ] Run `sudo bin/bootstrap.sh` against real snapshots
+- [ ] Run `sudo bin/monitor-run.sh home`
+- [ ] Install timer (`sudo bin/install-systemd.sh --install`)
+- [ ] Run `bin/verify-install.sh` to confirm health
+- [ ] Validate aggregate report (`bin/generate-mon-report.sh --stdout`)
 
 ---
 
@@ -164,6 +189,7 @@ Migration is gradual — old assert.sh tests stay until individually rewritten.
 | 2025-07-17 | Replace AWK with Python | Unify stack, easier maintenance |
 | 2025-07-17 | Privileged tests in separate dir | Prevent accidental root execution in CI |
 | 2025-07-17 | Adopt bats-core (gradual migration) | De facto standard, TAP output, setup/teardown, skip, parallel |
+| 2025-07-17 | SYSTEMD_DIR override for install tests | Test install logic without touching real systemd; verify-* scripts for post-install health check |
 
 ---
 
