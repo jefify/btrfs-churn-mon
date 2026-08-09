@@ -1,195 +1,188 @@
 # btrfs-churn-mon
 
-Analyze Btrfs snapshot churn and identify which files and directories are responsible for snapshot growth.
+Analyze Btrfs snapshot churn — find what changes between snapshots.
 
-The project helps answer:
-
+Answers:
 - Why are my snapshots growing?
-- Which files change the most?
-- Which paths generate the most churn?
-- What changed between snapshots?
+- Which files change the most between snapshots?
+- What's the biggest source of churn over time?
 
 ---
 
-## Features
+## Requirements
 
-- Analyze a single snapshot pair
-- Analyze all snapshot pairs
-- Bootstrap historical reports
-- Continuous monitoring with systemd timer
-- Aggregate reporting
-- JSON output
-- Markdown reporting
-- Exclude patterns
-- Time-range filtering
+- Python 3.10+
+- `typer` (via `apt install python3-typer` on Ubuntu 24.04+)
+- `btrfs-progs` (btrfs CLI tools)
+- sudo access for `btrfs send` / `btrfs receive --dump`
 
 ---
 
 ## Quick Start
 
-Bootstrap all existing snapshots:
-
 ```bash
-./bin/bootstrap.sh
-````
+# Install system components (user, sudoers, systemd, directories)
+sudo python3 bin/btrfs-churn-mon install
 
-Generate aggregate report:
+# Verify installation
+python3 bin/btrfs-churn-mon verify
 
-```bash
-./bin/generate-mon-report.sh --stdout
+# Run monitoring manually (all families)
+python3 bin/btrfs-churn-mon monitor
+
+# Check status
+python3 bin/btrfs-churn-mon status
 ```
 
-Generate JSON:
+---
 
-```bash
-./bin/generate-mon-report.sh --json
+## CLI Commands
+
+```
+btrfs-churn-mon monitor     Run monitoring cycle (find pairs, dump, parse, report)
+btrfs-churn-mon report      Generate churn report from a detail.tsv
+btrfs-churn-mon analyse     Aggregate churn report across all pairs
+btrfs-churn-mon status      Show configuration and tracked families
+btrfs-churn-mon bootstrap   Full historical bootstrap (all pairs)
+btrfs-churn-mon install     Install system components
+btrfs-churn-mon verify      Verify installation (alias: install --check)
+btrfs-churn-mon uninstall   Remove system components
 ```
 
-Recent reports only:
+### Monitor
 
 ```bash
-./bin/generate-mon-report.sh \
-    --limit 7d \
-    --stdout
+# Process all discovered families
+btrfs-churn-mon monitor
+
+# Process specific families
+btrfs-churn-mon monitor --families home,raiz
+
+# Dry-run (show what would be processed)
+btrfs-churn-mon monitor --dry-run
+```
+
+Without `--families`, reads `SNAPSHOT_FAMILIES` env var. Without either, discovers all families in snapdir.
+
+### Install / Uninstall
+
+```bash
+# Install (creates user, sudoers, systemd timer, directories, env file)
+sudo btrfs-churn-mon install
+
+# Dry-run
+sudo btrfs-churn-mon install --dry-run
+
+# Uninstall (preserves config and data)
+sudo btrfs-churn-mon uninstall --yes
+
+# Uninstall and remove reports/state
+sudo btrfs-churn-mon uninstall --yes --purge-data
 ```
 
 ---
 
 ## Project Layout
 
-```text
+```
 bin/
-    user-facing commands
+    btrfs-churn-mon          # CLI entry point
 
-lib/
-    internal implementation
+src/
+    __init__.py              # Root guard (assert_not_root)
+    cli.py                   # Typer app (dispatch)
+    config.py                # Configuration (ENV > file > defaults)
+    btrfs.py                 # BtrfsClient class (subprocess interface)
+    parser.py                # Parse btrfs send dump → churn data
+    report.py                # Per-pair report (markdown + JSON)
+    aggregate.py             # Multi-pair aggregate report
+    monitor.py               # State machine (find pairs, update state)
+    install.py               # Installer/uninstaller (systemd, user, sudoers)
 
-systemd/
-    service and timer
+install_data/
+    btrfs-churn-mon.service  # Systemd service template
+    btrfs-churn-mon.timer    # Systemd timer template
+    sudoers-btrfs-churn-mon  # Sudoers drop-in template
 
-test/
-    unit, integration, acceptance (legacy bash tests)
+etc/
+    btrfs-churn-mon.conf         # Runtime config (not installed — stays in repo)
+    btrfs-churn-mon.conf.example # Config example
 
 tests/
-    python/     (pytest)
+    unit/                    # pytest (152 tests)
+
+docs/
+    ENGINEERING_PLAN.md      # Development roadmap and decisions
+    INSTALL.md               # Detailed installation guide
 ```
 
 ---
 
-## Test Suites
+## Configuration
 
-Run CI-safe tests (no root, no btrfs):
+Precedence: **ENV > config file > defaults**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PREFIX` | `/opt/btrfs-churn-mon` | Installation prefix |
+| `SNAPDIR` | `/mnt/btrfs_pool/btrbk_snapshots` | Snapshot directory |
+| `DEFAULT_CATCHUP_LIMIT` | `100` | Max pairs per monitor run |
+
+Config file: `${PREFIX}/etc/btrfs-churn-mon.conf` or `$CONFIG` env var.
+
+---
+
+## Systemd Timer
+
+After install, the timer runs every 24h:
 
 ```bash
-./bin/test-ci.sh
+systemctl status btrfs-churn-mon.timer
 ```
 
-Run privileged tests (root + real btrfs):
-
+The service reads `/etc/default/btrfs-churn-mon`:
 ```bash
-sudo ./bin/test-real.sh
+SNAPSHOT_FAMILIES=home,raiz
 ```
 
-Run everything:
+---
 
-```bash
-sudo ./bin/test-all.sh
-```
+## Security Model
 
-Run Python tests:
+- Service runs as unprivileged user `btrfs-churn`
+- Only `btrfs send` / `btrfs receive --dump` escalate via sudoers
+- Root guard: process aborts if run as root (euid == 0)
+
+---
+
+## Tests
 
 ```bash
 python3 -m pytest
 ```
 
----
-
-## Bootstrap
-
-Generate reports for all existing snapshots:
-
-```bash
-./bin/bootstrap.sh
-```
-
-This creates:
-
-```text
-reports/
-state/
-```
-
-and initializes monitoring state.
+152 tests covering all modules (unit tests, mocked subprocess).
 
 ---
 
-## Monitoring
-
-Install systemd timer:
+## Upgrade
 
 ```bash
-sudo ./bin/install-systemd.sh --install
-```
-
-View installation plan:
-
-```bash
-./bin/install-systemd.sh --stdout
-```
-
-Dry run:
-
-```bash
-./bin/install-systemd.sh --dry-run
-```
-
----
-
-## Aggregate Reports
-
-Markdown:
-
-```bash
-./bin/generate-mon-report.sh --stdout
-```
-
-JSON:
-
-```bash
-./bin/generate-mon-report.sh --json
-```
-
-Custom output directory:
-
-```bash
-./bin/generate-mon-report.sh \
-    --out-dir /tmp/report
-```
-
-Exclude patterns:
-
-```bash
-./bin/generate-mon-report.sh \
-    --exclude excludes.txt
-```
-
-Recent reports only:
-
-```bash
-./bin/generate-mon-report.sh \
-    --limit 24h
+cd /opt/btrfs-churn-mon
+git pull
+sudo python3 bin/btrfs-churn-mon install   # re-installs units if changed
+python3 bin/btrfs-churn-mon verify
 ```
 
 ---
 
 ## Documentation
 
-- [Installation](docs/INSTALL.md) — requirements, setup, verification
-- [Engineering Plan](docs/ENGINEERING_PLAN.md) — development roadmap and decisions
+- [Engineering Plan](docs/ENGINEERING_PLAN.md) — roadmap, decisions, architecture
+- [Installation](docs/INSTALL.md) — detailed setup guide
 
 ---
 
 ## License
 
 MIT
-

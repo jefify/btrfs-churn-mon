@@ -1,0 +1,11 @@
+[Unit]
+Description=Btrfs Churn Monitor
+
+[Service]
+Type=oneshot
+User=btrfs-churn
+Group=btrfs-churn
+
+EnvironmentFile=-/etc/default/btrfs-churn-mon
+
+ExecStart=/usr/bin/python3 /opt/btrfs-churn-mon/bin/btrfs-churn-mon monitor --families ${SNAPSHOT_FAMILIES:-home}

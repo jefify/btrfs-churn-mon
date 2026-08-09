@@ -2,175 +2,120 @@
 
 ## Requirements
 
-Required:
-
-- Linux
-- Btrfs
-- Python 3
-- awk
-- systemd (optional)
-
-Recommended:
-
-- btrbk
-- jq
+- Linux with Btrfs filesystem
+- Python 3.10+
+- `python3-typer` (Ubuntu 24.04: `apt install python3-typer`)
+- `btrfs-progs` (`apt install btrfs-progs`)
+- systemd
+- btrbk (recommended — for snapshot management)
 
 ---
 
 ## Clone
 
 ```bash
-git clone <repo-url>
+sudo git clone <repo-url> /opt/btrfs-churn-mon
+cd /opt/btrfs-churn-mon
+```
 
-cd btrfs-churn-mon
-````
+---
+
+## Install
+
+```bash
+# Install all system components
+sudo python3 bin/btrfs-churn-mon install
+```
+
+This creates:
+1. System user `btrfs-churn` (no-home, nologin)
+2. Sudoers rule `/etc/sudoers.d/btrfs-churn-mon`
+3. Systemd service + timer (24h cycle)
+4. Data directories: `PREFIX/{reports,state}`
+5. Environment file: `/etc/default/btrfs-churn-mon`
+
+Preview without changes:
+
+```bash
+sudo python3 bin/btrfs-churn-mon install --dry-run
+```
 
 ---
 
 ## Verify
 
-Run unit tests:
-
 ```bash
-./bin/test-unit.sh
-```
-
-Run integration tests:
-
-```bash
-./bin/test-integration.sh
+python3 bin/btrfs-churn-mon verify
 ```
 
 Expected:
+```
+✅ All checks passed.
+```
 
-```text
-FAILS=0
+Check timer status:
+```bash
+systemctl status btrfs-churn-mon.timer
 ```
 
 ---
 
-## Bootstrap Existing Snapshots
+## Configuration
 
-Analyze all existing snapshot pairs:
+Edit `/etc/default/btrfs-churn-mon`:
 
 ```bash
-./bin/bootstrap.sh
+# Comma-separated list of families to monitor
+SNAPSHOT_FAMILIES=home,raiz
 ```
 
-Expected output:
+Runtime config at `PREFIX/etc/btrfs-churn-mon.conf`:
 
-```text
-reports/
-state/
+```bash
+PREFIX=/opt/btrfs-churn-mon
+SNAPDIR=/mnt/btrfs_pool/btrbk_snapshots
+DEFAULT_CATCHUP_LIMIT=100
 ```
 
 ---
 
-## Generate Reports
+## Bootstrap
 
-Markdown:
-
-```bash
-./bin/generate-mon-report.sh --stdout
-```
-
-JSON:
+Process all historical snapshot pairs:
 
 ```bash
-./bin/generate-mon-report.sh --json
+python3 bin/btrfs-churn-mon bootstrap
 ```
 
 ---
 
-## Install Monitoring
-
-Preview:
+## Upgrade
 
 ```bash
-./bin/install-systemd.sh --stdout
-```
-
-Dry run:
-
-```bash
-./bin/install-systemd.sh --dry-run
-```
-
-Install:
-
-```bash
-sudo ./bin/install-systemd.sh --install
-```
-
-Verify:
-
-```bash
-systemctl status \
-    btrfs-churn-mon.timer
+cd /opt/btrfs-churn-mon
+git pull
+sudo python3 bin/btrfs-churn-mon install   # re-installs if units changed
+python3 bin/btrfs-churn-mon verify
 ```
 
 ---
 
-## Directory Structure
-
-```text
-reports/
-    generated reports
-
-state/
-    monitoring state
-
-systemd/
-    unit files
-```
-
----
-
-## Test Categories
-
-### Unit
-
-No Btrfs required.
+## Uninstall
 
 ```bash
-./bin/test-unit.sh
+# Preserves config and data
+sudo python3 bin/btrfs-churn-mon uninstall --yes
+
+# Remove everything including reports/state
+sudo python3 bin/btrfs-churn-mon uninstall --yes --purge-data
 ```
 
 ---
 
-### Integration
-
-Uses temporary directories and fake data.
+## Tests
 
 ```bash
-./bin/test-integration.sh
+python3 -m pytest
 ```
 
----
-
-### Acceptance Safe
-
-Does not modify the system.
-
-```bash
-./bin/test-acceptance-safe.sh
-```
-
----
-
-### Acceptance Real
-
-May modify the system.
-
-```bash
-./bin/test-acceptance-real.sh
-```
-
----
-
-### Local
-
-Uses real snapshot environments.
-
-These tests are intentionally excluded from CI.
-
+152 unit tests — no root, no btrfs required.

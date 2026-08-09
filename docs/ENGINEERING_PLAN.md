@@ -1,7 +1,7 @@
 # Engineering Plan — btrfs-churn-mon
 
 Status: Active  
-Last updated: 2026-08-04
+Last updated: 2026-08-09
 
 ---
 
@@ -10,8 +10,11 @@ Last updated: 2026-08-04
 Project built iteratively with AI assistance. Phases 0-3 completed:
 security audit, test stabilization, timer active in production.
 
-Current state: hybrid bash+python. Decision: **migrate fully to Python**
-with Typer CLI. Bash stays only for legacy tests (to be removed).
+Phase 4 in progress: Python migration. 4.1-4.7 complete (152 tests).
+Remaining: 4.8 (cleanup — remove legacy bash/lib/test).
+
+Current state: Python CLI fully functional (`bin/btrfs-churn-mon`).
+Bash scripts remain but are superseded. Timer uses Python entry point.
 
 ---
 
@@ -171,38 +174,42 @@ Steps:
 - [ ] Create `tests/test_monitor.py`
 - [ ] Create `tests/test_bootstrap.py`
 
-### 4.6 — Install module (migrate from bash)
+### 4.6 — Install module (migrate from bash) ✅
 
-- [ ] Create `src/install.py` (systemd install/verify/health-check)
-- [ ] Install creates:
-  - System user `btrfs-churn` (verify if exists, create if not — `useradd --system --no-create-home`)
+- [x] Create `src/install.py` (systemd install/verify/health-check)
+- [x] Install creates:
+  - System user `btrfs-churn` (via `sudo useradd --system --no-create-home`)
   - `/etc/sudoers.d/btrfs-churn-mon` (privilege escalation for btrfs send)
   - systemd service (runs as `User=btrfs-churn`)
   - systemd timer
   - Directories with correct ownership: `PREFIX/{reports,state}` owned by `btrfs-churn`
-- [ ] `btrfs-churn-mon install --check` validates: user exists + sudoers + systemd + permissions
-- [ ] Create `tests/test_install.py`
-- [ ] Move `systemd/` → `etc/systemd/`
+  - `/etc/default/btrfs-churn-mon` (EnvironmentFile with SNAPSHOT_FAMILIES)
+- [x] `btrfs-churn-mon install --check` validates: user exists + sudoers + systemd + permissions
+- [x] `btrfs-churn-mon uninstall` (stop timer, remove units/sudoers/user, preserves config+data)
+- [x] Create `tests/test_install.py` (30 tests)
+- [x] Root guard: `assert_not_root()` aborts if euid==0 (security: service must NOT run as root)
 
-### 4.7 — Typer CLI (final assembly)
+### 4.7 — Typer CLI (final assembly) ✅
 
-- [ ] Create `src/cli.py` with Typer app
-- [ ] Subcommands: report, analyse, monitor, status, bootstrap, install, verify
-- [ ] Create `bin/btrfs-churn-mon` (entry point → `src.cli:app`)
-- [ ] Create `tests/test_cli.py` (CliRunner)
-- [ ] `--install-completion` for bash/zsh/fish
-- [ ] Update systemd service ExecStart
+- [x] Create `src/cli.py` with Typer app
+- [x] Subcommands: monitor, report, analyse, status, bootstrap, install, verify, uninstall
+- [x] `monitor --families home,raiz` or env var `SNAPSHOT_FAMILIES` (without: processes ALL)
+- [x] Create `bin/btrfs-churn-mon` (entry point → `src.cli:app`)
+- [x] Create `tests/test_cli.py` (22 tests via CliRunner)
+- [x] `--install-completion` for bash/zsh/fish
+- [x] Update systemd service ExecStart to Python entry point
+- [x] Root guard on all commands except install/uninstall
 
-### 4.8 — Cleanup
+### 4.8 — Cleanup ✅
 
-- [ ] Remove all `bin/*.sh` (old scripts)
-- [ ] Remove `lib/` directory (absorbed into src/)
-- [ ] Remove `cmd/` if created
-- [ ] Remove `test/` (legacy bash tests)
-- [ ] Remove `tests/python/` (merged into `tests/`)
-- [ ] Update README, INSTALL.md
-- [ ] Update pyproject.toml (dependencies: typer)
-- [ ] Final: `pytest` green + `btrfs-churn-mon --help` works
+- [x] Remove all `bin/*.sh` (old scripts)
+- [x] Remove `lib/` directory (absorbed into src/)
+- [x] Remove `test/` (legacy bash tests)
+- [x] Move `systemd/` and `etc/sudoers.d/` → `install_data/`
+- [x] Update README.md (full rewrite — Python CLI)
+- [x] Update INSTALL.md (full rewrite)
+- [x] Update pyproject.toml (version 1.0.0, dependencies: typer, python >=3.10)
+- [x] Final: `pytest` green (152 tests) + `btrfs-churn-mon --help` works
 
 ---
 
@@ -231,6 +238,12 @@ Steps:
 | 2026-08-04 | BtrfsClient class for CLI interface | Reusable, mockable, handles quirks centrally |
 | 2026-08-04 | Typer for CLI dispatch | Single declaration → parsing + help + completion |
 | 2026-08-04 | sudoers for privilege escalation | Only btrfs send needs root; service runs unprivileged |
+| 2026-08-09 | Root guard (assert_not_root) | Service must NOT run as root — abort early if euid==0 |
+| 2026-08-09 | SNAPSHOT_FAMILIES (plural, comma-sep) | Multiple families per timer execution (home,raiz) |
+| 2026-08-09 | monitor without --families = all | Auto-discover and process all families in snapdir |
+| 2026-08-09 | /etc/default managed by installer | EnvironmentFile created with conflict detection (no overwrite without --force-env) |
+| 2026-08-09 | uninstall preserves config + data | Config NEVER removed; data only with --purge-data |
+| 2026-08-09 | python3-typer via apt (Ubuntu 24.04) | System-wide dep, no venv needed, no pip conflict |
 
 ---
 

@@ -1,4 +1,4 @@
-"""Tests for lib/parse_churn.py — TDD Red Phase.
+"""Tests for src/parser.py — parse btrfs receive dump output.
 
 Contract:
 - Parse btrfs receive --dump output
@@ -8,11 +8,9 @@ Contract:
 - Output: bytes\tpath (unsorted)
 """
 
-import subprocess
-import tempfile
-from pathlib import Path
-
 import pytest
+
+from src.parser import aggregate, format_output, parse_line
 
 from src.parser import parse_line, aggregate, format_output
 
@@ -160,10 +158,10 @@ class TestFormatOutput:
 
 
 class TestCLI:
-    """Test CLI invocation matches contract."""
+    """Test parser produces correct output from raw dump content."""
 
     def test_cli_invocation(self):
-        """CLI should produce same output as AWK on same input."""
+        """Parser aggregate + format_output produces TSV matching expected."""
         dump_content = (
             "write ./lin/file1 offset=0 len=1000\n"
             "write ./lin/file2 offset=0 len=2000\n"
@@ -171,25 +169,13 @@ class TestCLI:
             "mkfile ./ignored\n"
         )
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".dump", delete=False) as f:
-            f.write(dump_content)
-            dump_path = f.name
+        entries = aggregate(dump_content.splitlines())
+        output = format_output(entries)
 
-        try:
-            result = subprocess.run(
-                ["python3", "lib/parse_churn.py", dump_path],
-                capture_output=True,
-                text=True,
-                cwd=str(Path(__file__).resolve().parents[2]),
-            )
-            assert result.returncode == 0
+        lines = [l for l in output.strip().split("\n") if l]
+        parsed = {}
+        for line in lines:
+            parts = line.split("\t", 1)
+            parsed[parts[1]] = int(parts[0])
 
-            lines = [l for l in result.stdout.strip().split("\n") if l]
-            parsed = {}
-            for line in lines:
-                parts = line.split("\t", 1)
-                parsed[parts[1]] = int(parts[0])
-
-            assert parsed == {"lin/file1": 1000, "lin/file2": 2000, "lin/file3": 3000}
-        finally:
-            Path(dump_path).unlink()
+        assert parsed == {"lin/file1": 1000, "lin/file2": 2000, "lin/file3": 3000}
