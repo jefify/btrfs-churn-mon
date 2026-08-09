@@ -8,4 +8,4 @@ Group=btrfs-churn
 
 EnvironmentFile=-/etc/default/btrfs-churn-mon
 
-ExecStart=/usr/bin/python3 /opt/btrfs-churn-mon/bin/btrfs-churn-mon monitor --families ${SNAPSHOT_FAMILIES:-home}
+ExecStart=/usr/bin/python3 /opt/btrfs-churn-mon/bin/btrfs-churn-mon monitor
