@@ -2,4 +2,4 @@
 # Install to: /etc/sudoers.d/btrfs-churn-mon
 # The service user needs root only for reading snapshot send streams.
 
-btrfs-churn ALL=(root) NOPASSWD: /usr/bin/btrfs send *, /usr/bin/btrfs receive --dump *
+btrfs-churn ALL=(root) NOPASSWD: /usr/bin/btrfs send *, /usr/bin/btrfs receive --dump, /usr/bin/btrfs receive --dump *
