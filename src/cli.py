@@ -17,6 +17,7 @@ from src.aggregate import generate_aggregate
 from src.btrfs import BtrfsClient
 from src.config import Config, load_config
 from src.install import CheckResult, CheckStatus, Installer
+from src.log import setup_logging, get_logger
 from src.monitor import find_pairs, read_state, write_state
 from src.parser import aggregate as parse_aggregate, format_output
 from src.report import generate_report
@@ -27,6 +28,21 @@ app = typer.Typer(
     invoke_without_command=True,
     no_args_is_help=True,
 )
+
+
+# --- State ---
+
+_verbose = False
+
+
+@app.callback()
+def main(
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging."),
+) -> None:
+    """Global options."""
+    global _verbose
+    _verbose = verbose
+    setup_logging(verbose=verbose)
 
 
 # --- Helper functions ---
@@ -71,6 +87,7 @@ def monitor(
     processes ALL families in snapdir.
     """
     assert_not_root()
+    log = get_logger("monitor")
     config = _get_config()
     client = BtrfsClient(use_sudo=True)
 
@@ -81,6 +98,7 @@ def monitor(
         family_list = client.discover_families(config.snapdir)
 
     if not family_list:
+        log.warning("No families found in snapdir %s", config.snapdir)
         typer.echo("No families found in snapdir.")
         return
 
@@ -88,6 +106,7 @@ def monitor(
 
     for family in family_list:
         snapshots = client.find_snapshots(config.snapdir, family)
+        log.debug("Family %s: %d snapshots found", family, len(snapshots))
         pairs = find_pairs(
             family=family,
             snapshots=snapshots,
@@ -96,6 +115,7 @@ def monitor(
         )
 
         if not pairs:
+            log.info("[%s] Up-to-date — no pairs to process", family)
             typer.echo(f"[{family}] Up-to-date — no pairs to process.")
             continue
 
@@ -106,14 +126,17 @@ def monitor(
             continue
 
         for old, new in pairs:
+            log.info("[%s] Processing: %s → %s", family, old.name, new.name)
             typer.echo(f"[{family}] Processing: {old.name} → {new.name}")
 
             # Dump
             dump = client.send_dump(old, new)
+            log.debug("[%s] Dump size: %d bytes", family, len(dump))
 
             # Parse
             entries = parse_aggregate(dump.splitlines())
             detail_lines = format_output(entries)
+            log.debug("[%s] Parsed %d unique paths", family, len(entries))
 
             # Save detail.tsv
             report_dir = config.reports_dir / family / new.name
@@ -131,6 +154,7 @@ def monitor(
             write_state(config.state_dir, family, new.name)
 
         total_processed += len(pairs)
+        log.info("[%s] Done — %d pair(s) processed", family, len(pairs))
         typer.echo(f"[{family}] Done — {len(pairs)} pair(s) processed.")
 
     if not dry_run and total_processed == 0:
