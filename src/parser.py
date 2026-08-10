@@ -75,18 +75,18 @@ def aggregate(lines) -> dict:
 
 
 def format_output(data: dict) -> str:
-    """Format aggregated data as bytes\\tpath lines.
+    """Format aggregated data as bytes\\tpath lines with header.
 
     Args:
         data: dict mapping path -> total_bytes
 
     Returns:
-        String with one line per entry (no trailing newline if empty)
+        String with header + one line per entry (no trailing newline if empty)
     """
     if not data:
         return ""
 
-    lines = []
+    lines = ["BYTES\tPATH"]
     for path, total in data.items():
         lines.append(f"{total}\t{path}")
 

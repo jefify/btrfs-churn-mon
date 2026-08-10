@@ -133,25 +133,34 @@ class TestAggregate:
 
 
 class TestFormatOutput:
-    """Test output formatting (bytes\tpath)."""
+    """Test output formatting (BYTES\\tPATH with header)."""
 
     def test_format_single_entry(self):
         data = {"home/user/file.txt": 1024}
         output = format_output(data)
-        assert output.strip() == "1024\thome/user/file.txt"
+        lines = output.strip().split("\n")
+        assert lines[0] == "BYTES\tPATH"
+        assert lines[1] == "1024\thome/user/file.txt"
 
     def test_format_multiple_entries(self):
         data = {"file_a": 100, "file_b": 200}
         output = format_output(data)
         lines = output.strip().split("\n")
-        assert len(lines) == 2
-        # Check that both entries are present (order not guaranteed)
+        assert lines[0] == "BYTES\tPATH"
+        assert len(lines) == 3  # header + 2 entries
         assert "100\tfile_a" in lines
         assert "200\tfile_b" in lines
 
     def test_format_empty(self):
         output = format_output({})
         assert output == ""
+
+    def test_format_header_always_first(self):
+        """Header line is always the first line."""
+        data = {"a": 1, "b": 2, "c": 3}
+        output = format_output(data)
+        first_line = output.split("\n")[0]
+        assert first_line == "BYTES\tPATH"
 
 
 # --- CLI integration test ---
@@ -173,9 +182,73 @@ class TestCLI:
         output = format_output(entries)
 
         lines = [l for l in output.strip().split("\n") if l]
+        # First line is header
+        assert lines[0] == "BYTES\tPATH"
+        # Parse data lines
         parsed = {}
-        for line in lines:
+        for line in lines[1:]:
             parts = line.split("\t", 1)
             parsed[parts[1]] = int(parts[0])
 
         assert parsed == {"lin/file1": 1000, "lin/file2": 2000, "lin/file3": 3000}
+        # Verify sum
+        assert sum(parsed.values()) == 6000
+
+
+# --- Aggregation correctness tests ---
+
+
+class TestAggregationCorrectness:
+    """Test that aggregation sums are correct across multiple writes."""
+
+    def test_multiple_writes_same_file_sum_correctly(self):
+        """Multiple write ops to same path should sum their sizes."""
+        dump = (
+            "write ./data/big.db offset=0 len=4096\n"
+            "write ./data/big.db offset=4096 len=4096\n"
+            "write ./data/big.db offset=8192 len=2048\n"
+        )
+        entries = aggregate(dump.splitlines())
+        assert entries["data/big.db"] == 4096 + 4096 + 2048  # 10240
+
+    def test_clone_and_write_same_file_sum(self):
+        """Clone + write to same path both contribute to total."""
+        dump = (
+            "write ./app/log.txt offset=0 len=500\n"
+            "clone ./app/log.txt offset=500 len=300 from=./x clone_offset=0 clone_len=300\n"
+        )
+        entries = aggregate(dump.splitlines())
+        assert entries["app/log.txt"] == 800
+
+    def test_total_across_all_files(self):
+        """Total of all entries equals sum of all len= values."""
+        dump = (
+            "write ./a offset=0 len=100\n"
+            "write ./b offset=0 len=200\n"
+            "write ./c offset=0 len=300\n"
+            "write ./a offset=100 len=50\n"  # second write to 'a'
+            "clone ./b offset=200 len=150 from=./x clone_offset=0 clone_len=150\n"
+        )
+        entries = aggregate(dump.splitlines())
+
+        assert entries["a"] == 150  # 100 + 50
+        assert entries["b"] == 350  # 200 + 150
+        assert entries["c"] == 300
+        assert sum(entries.values()) == 800  # total
+
+    def test_format_output_preserves_exact_values(self):
+        """Values in format_output match exactly what aggregate returns."""
+        dump = (
+            "write ./x/y offset=0 len=999999\n"
+            "write ./x/y offset=999999 len=1\n"
+        )
+        entries = aggregate(dump.splitlines())
+        output = format_output(entries)
+
+        # Parse back and verify
+        lines = output.strip().split("\n")[1:]  # skip header
+        for line in lines:
+            size_str, path = line.split("\t", 1)
+            assert int(size_str) == entries[path]
+
+        assert entries["x/y"] == 1000000
