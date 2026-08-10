@@ -58,7 +58,7 @@ def config(tmp_prefix):
 
 
 @pytest.fixture
-def installer(config, tmp_systemd, tmp_sudoers):
+def installer(config, tmp_systemd, tmp_sudoers, tmp_path):
     """Installer with all paths pointing to tmp dirs."""
     return Installer(
         config=config,
@@ -66,6 +66,7 @@ def installer(config, tmp_systemd, tmp_sudoers):
         sudoers_dir=tmp_sudoers,
         user="btrfs-churn",
         project_root=Path(__file__).resolve().parents[2],
+        log_file=tmp_path / "btrfs-churn-mon.log",
     )
 
 
@@ -243,9 +244,9 @@ class TestEnsureDirectories:
             installer.ensure_directories()
 
         cmds = [c[0][0] for c in mock_run.call_args_list]
-        # Should chown both reports and state
+        # Should chown reports, state, and log file
         chown_cmds = [c for c in cmds if c[0] == "chown"]
-        assert len(chown_cmds) == 2
+        assert len(chown_cmds) == 3
         for cmd in chown_cmds:
             assert "btrfs-churn" in cmd[1]  # user:user
 
@@ -287,6 +288,7 @@ class TestCheck:
         (tmp_sudoers / "btrfs-churn-mon").write_text("sudoers content")
         (tmp_systemd / "btrfs-churn-mon.service").write_text("[Service]")
         (tmp_systemd / "btrfs-churn-mon.timer").write_text("[Timer]")
+        installer.log_file.touch()
 
         with patch("subprocess.run") as mock_run:
             # id -u succeeds (user exists)
@@ -299,6 +301,7 @@ class TestCheck:
         assert result.systemd_service == CheckStatus.OK
         assert result.systemd_timer == CheckStatus.OK
         assert result.directories == CheckStatus.OK
+        assert result.log_file == CheckStatus.OK
 
     def test_missing_user_returns_fail(self, installer, tmp_prefix, tmp_systemd, tmp_sudoers):
         """When user doesn't exist, check.user is MISSING."""

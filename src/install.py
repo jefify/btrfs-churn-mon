@@ -37,6 +37,7 @@ class CheckResult:
     systemd_service: CheckStatus = CheckStatus.MISSING
     systemd_timer: CheckStatus = CheckStatus.MISSING
     directories: CheckStatus = CheckStatus.MISSING
+    log_file: CheckStatus = CheckStatus.MISSING
 
     @property
     def ok(self) -> bool:
@@ -49,6 +50,7 @@ class CheckResult:
                 self.systemd_service,
                 self.systemd_timer,
                 self.directories,
+                self.log_file,
             )
         )
 
@@ -65,6 +67,8 @@ class CheckResult:
             issues.append("Systemd timer unit missing")
         if self.directories != CheckStatus.OK:
             issues.append("Data directories (reports/state) missing")
+        if self.log_file != CheckStatus.OK:
+            issues.append("Log file /var/log/btrfs-churn-mon.log missing")
         return issues
 
 
@@ -91,12 +95,14 @@ class Installer:
         user: str = "btrfs-churn",
         project_root: Path | None = None,
         manage_systemd: bool = True,
+        log_file: Path | None = None,
     ):
         self.config = config
         self.systemd_dir = systemd_dir
         self.sudoers_dir = sudoers_dir
         self.user = user
         self.manage_systemd = manage_systemd
+        self.log_file = log_file if log_file is not None else Path("/var/log/btrfs-churn-mon.log")
 
         if project_root is None:
             # Default: assume src/install.py is at <root>/src/install.py
@@ -196,6 +202,7 @@ class Installer:
         Creates:
             PREFIX/reports
             PREFIX/state
+            /var/log/btrfs-churn-mon.log (owned by service user)
         """
         prefix = self.config.prefix
         prefix.mkdir(parents=True, exist_ok=True)
@@ -208,6 +215,15 @@ class Installer:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
+
+        # Log file (needs to be writable by service user)
+        if not self.log_file.exists():
+            self.log_file.touch()
+        subprocess.run(
+            ["chown", f"{self.user}:{self.user}", str(self.log_file)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
 
     def check(self) -> CheckResult:
         """Run health-check on installation state.
@@ -240,6 +256,10 @@ class Installer:
         prefix = self.config.prefix
         if (prefix / "reports").is_dir() and (prefix / "state").is_dir():
             result.directories = CheckStatus.OK
+
+        # Check log file
+        if self.log_file.exists():
+            result.log_file = CheckStatus.OK
 
         return result
 
