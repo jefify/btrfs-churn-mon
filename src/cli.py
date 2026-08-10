@@ -7,6 +7,7 @@ All commands (except install) call assert_not_root() to prevent
 running as root — the service must run as unprivileged user.
 """
 
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -126,17 +127,21 @@ def monitor(
             continue
 
         for old, new in pairs:
+            t_pair = time.time()
             log.info("[%s] Processing: %s → %s", family, old.name, new.name)
             typer.echo(f"[{family}] Processing: {old.name} → {new.name}")
 
             # Dump
             dump = client.send_dump(old, new)
-            log.debug("[%s] Dump size: %d bytes", family, len(dump))
+            dump_lines = dump.count("\n")
+            log.debug("[%s] Dump size: %d bytes, %d lines", family, len(dump), dump_lines)
 
             # Parse
             entries = parse_aggregate(dump.splitlines())
+            n_entries = len(entries)
+            total_churn = sum(entries.values()) if entries else 0
             detail_lines = format_output(entries)
-            log.debug("[%s] Parsed %d unique paths", family, len(entries))
+            log.debug("[%s] Parsed %d unique paths, total churn %d bytes", family, n_entries, total_churn)
 
             # Save detail.tsv
             report_dir = config.reports_dir / family / new.name
@@ -152,6 +157,11 @@ def monitor(
 
             # Update state
             write_state(config.state_dir, family, new.name)
+            elapsed = time.time() - t_pair
+            log.info(
+                "[%s] %s → %s | paths=%d, churn=%d bytes, time=%.1fs",
+                family, old.name, new.name, n_entries, total_churn, elapsed,
+            )
 
         total_processed += len(pairs)
         log.info("[%s] Done — %d pair(s) processed", family, len(pairs))
@@ -232,8 +242,11 @@ def bootstrap(
 ) -> None:
     """Full historical bootstrap — process all available pairs."""
     assert_not_root()
+    log = get_logger("bootstrap")
     config = _get_config()
     client = BtrfsClient(use_sudo=True)
+
+    t_start = time.time()
 
     if family:
         families = [family]
@@ -241,23 +254,41 @@ def bootstrap(
         families = client.discover_families(config.snapdir)
 
     if not families:
+        log.warning("No families found in %s", config.snapdir)
         typer.echo("No families found.")
         return
 
+    log.info("Bootstrap started — families: %s, limit: %d/family", ", ".join(families), limit)
+    total_pairs = 0
+    total_bytes_dumped = 0
+    total_entries = 0
+
     for fam in families:
         snapshots = client.find_snapshots(config.snapdir, fam)
+        log.debug("[%s] %d snapshots found", fam, len(snapshots))
+
         if len(snapshots) < 2:
+            log.info("[%s] Less than 2 snapshots — skipping", fam)
             typer.echo(f"[{fam}] Less than 2 snapshots — skipping.")
             continue
 
         pairs = [(snapshots[i], snapshots[i + 1]) for i in range(len(snapshots) - 1)]
         pairs = pairs[:limit]
 
+        log.info("[%s] Bootstrapping %d pair(s)...", fam, len(pairs))
         typer.echo(f"[{fam}] Bootstrapping {len(pairs)} pair(s)...")
 
         for old, new in pairs:
+            t_pair = time.time()
             dump = client.send_dump(old, new)
+            dump_size = len(dump)
+            dump_lines = dump.count("\n")
+            total_bytes_dumped += dump_size
+
             entries = parse_aggregate(dump.splitlines())
+            n_entries = len(entries)
+            total_entries += n_entries
+            total_churn = sum(entries.values()) if entries else 0
             detail_lines = format_output(entries)
 
             report_dir = config.reports_dir / fam / new.name
@@ -271,8 +302,22 @@ def bootstrap(
                 (report_dir / "report.md").write_text(md, encoding="utf-8")
 
             write_state(config.state_dir, fam, new.name)
+            elapsed = time.time() - t_pair
 
+            log.info(
+                "[%s] %s → %s | dump=%d lines, paths=%d, churn=%d bytes, time=%.1fs",
+                fam, old.name, new.name, dump_lines, n_entries, total_churn, elapsed,
+            )
+            total_pairs += 1
+
+        log.info("[%s] Bootstrap complete — %d pair(s)", fam, len(pairs))
         typer.echo(f"[{fam}] Bootstrap complete.")
+
+    elapsed_total = time.time() - t_start
+    log.info(
+        "Bootstrap finished — %d pair(s), %d unique paths, %.1f MB dumped, %.1fs total",
+        total_pairs, total_entries, total_bytes_dumped / 1048576, elapsed_total,
+    )
 
 
 @app.command()
@@ -307,7 +352,10 @@ def install(
         return
 
     typer.echo("Installing btrfs-churn-mon...")
+    log = get_logger("install")
+    log.info("Install started")
     installer.install_all()
+    log.info("System components installed (user, sudoers, dirs, systemd)")
 
     # Environment file
     env_target = Path("/etc/default/btrfs-churn-mon")
@@ -320,15 +368,20 @@ def install(
         env_target, families=families, force=force_env
     )
     if env_result == "created":
+        log.info("Created %s (SNAPSHOT_FAMILIES=%s)", env_target, ",".join(families))
         typer.echo(f"  ✅ Created {env_target} (SNAPSHOT_FAMILIES={','.join(families)})")
     elif env_result == "unchanged":
+        log.info("%s already up-to-date", env_target)
         typer.echo(f"  ℹ️  {env_target} already up-to-date")
     elif env_result == "updated":
+        log.info("Updated %s (SNAPSHOT_FAMILIES=%s)", env_target, ",".join(families))
         typer.echo(f"  ✅ Updated {env_target} (SNAPSHOT_FAMILIES={','.join(families)})")
     elif env_result == "conflict":
+        log.warning("%s exists with different content — kept as-is", env_target)
         typer.echo(f"  ⚠️  {env_target} exists with different content — kept as-is")
         typer.echo(f"      Use --force-env to overwrite, or edit manually.")
 
+    log.info("Install complete")
     typer.echo("✅ Installation complete.")
 
 
@@ -387,6 +440,9 @@ def uninstall(
         sudoers_dir=Path("/etc/sudoers.d"),
     )
 
+    log = get_logger("uninstall")
+    log.info("Uninstall started (purge_data=%s, keep_user=%s)", purge_data, keep_user)
     typer.echo("Uninstalling btrfs-churn-mon...")
     installer.uninstall(purge_data=purge_data, keep_user=keep_user)
+    log.info("Uninstall complete")
     typer.echo("✅ Uninstall complete.")
