@@ -1,0 +1,15 @@
+# btrfs-exclude-path.sh — Configuration
+#
+# Copy to: /opt/btrfs-churn-mon/etc/btrfs-exclude-path.conf
+#
+# All values can be overridden via command-line flags.
+
+# Btrfs device (auto-detected if empty)
+# DEVICE=/dev/dm-0
+
+# Prefix for subvolume names (empty = flat, like var_cache)
+# Example: SUBVOL_PREFIX=nosnap → creates nosnap/var_cache
+# SUBVOL_PREFIX=
+
+# Mount options for the subvolume
+BTRFS_MOUNT_OPTS="noatime,compress=zstd"
