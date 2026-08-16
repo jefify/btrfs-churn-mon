@@ -1,20 +1,18 @@
 # Engineering Plan — btrfs-churn-mon
 
 Status: Active  
-Last updated: 2026-08-09
+Last updated: 2026-08-15
 
 ---
 
 ## Context
 
-Project built iteratively with AI assistance. Phases 0-3 completed:
-security audit, test stabilization, timer active in production.
+Project built iteratively with AI assistance. Phases 0-4 completed.
+Full Python migration done (v1.0.0). Timer active in production.
 
-Phase 4 in progress: Python migration. 4.1-4.7 complete (152 tests).
-Remaining: 4.8 (cleanup — remove legacy bash/lib/test).
-
-Current state: Python CLI fully functional (`bin/btrfs-churn-mon`).
-Bash scripts remain but are superseded. Timer uses Python entry point.
+Current state: single-language Python project with Typer CLI.
+170 tests, comprehensive logging, systemd integration.
+Utility script for excluding volatile paths from snapshots.
 
 ---
 
@@ -215,13 +213,15 @@ Steps:
 
 ## Phase 5 — Features (post-migration)
 
-| Feature | Priority | Notes |
-|---------|----------|-------|
-| Retention/rotation | High | `btrfs-churn-mon report --keep-days 30` |
-| GitHub Actions CI | Medium | pytest only (no btrfs needed for unit/integration) |
-| Trend analysis | Low | ASCII graphs, path history |
-| Exclude management | Low | Config-based exclude patterns |
-| Health check | Low | `btrfs-churn-mon status --health` |
+| Feature | Priority | Status | Notes |
+|---------|----------|--------|-------|
+| Logging (journald + /var/log) | High | ✅ Done | INFO/WARNING/ERROR to file, DEBUG with -v |
+| Exclude path utility | High | ✅ Done | `scripts/btrfs-exclude-path.sh` |
+| Retention/rotation | Medium | Pending | `btrfs-churn-mon report --keep-days 30` |
+| GitHub Actions CI | Medium | Pending | pytest only (no btrfs needed for unit/integration) |
+| Trend analysis | Low | Pending | ASCII graphs, path history |
+| Exclude management | Low | Pending | Config-based exclude patterns for reports |
+| Health check | Low | Pending | `btrfs-churn-mon status --health` |
 
 ---
 
@@ -244,6 +244,10 @@ Steps:
 | 2026-08-09 | /etc/default managed by installer | EnvironmentFile created with conflict detection (no overwrite without --force-env) |
 | 2026-08-09 | uninstall preserves config + data | Config NEVER removed; data only with --purge-data |
 | 2026-08-09 | python3-typer via apt (Ubuntu 24.04) | System-wide dep, no venv needed, no pip conflict |
+| 2026-08-09 | Dual logging (stderr + file) | stderr for journald, /var/log for persistent; file=INFO+, stderr=DEBUG with -v |
+| 2026-08-09 | Exclude via nested subvolume + .mount | Canonical btrfs approach; systemd units replace fstab lines |
+| 2026-08-09 | Selective btrbk snapshot (BTRBK_MAP) | Only snapshot affected subvolume, not all |
+| 2026-08-09 | reflink copy for subvolume migration | cp --reflink=auto shares blocks without extra disk usage |
 
 ---
 

@@ -15,6 +15,7 @@ Answers:
 - `typer` (via `apt install python3-typer` on Ubuntu 24.04+)
 - `btrfs-progs` (btrfs CLI tools)
 - sudo access for `btrfs send` / `btrfs receive --dump`
+- btrbk (recommended — snapshot management)
 
 ---
 
@@ -60,6 +61,9 @@ btrfs-churn-mon monitor --families home,raiz
 
 # Dry-run (show what would be processed)
 btrfs-churn-mon monitor --dry-run
+
+# Verbose logging (debug level)
+btrfs-churn-mon -v monitor
 ```
 
 Without `--families`, reads `SNAPSHOT_FAMILIES` env var. Without either, discovers all families in snapdir.
@@ -67,7 +71,7 @@ Without `--families`, reads `SNAPSHOT_FAMILIES` env var. Without either, discove
 ### Install / Uninstall
 
 ```bash
-# Install (creates user, sudoers, systemd timer, directories, env file)
+# Install (creates user, sudoers, systemd timer, directories, env file, log file)
 sudo btrfs-churn-mon install
 
 # Dry-run
@@ -82,38 +86,86 @@ sudo btrfs-churn-mon uninstall --yes --purge-data
 
 ---
 
+## Logging
+
+Two outputs:
+- **stderr** → captured by journald (visible via `journalctl`)
+- **/var/log/btrfs-churn-mon.log** → persistent file (INFO/WARNING/ERROR)
+
+```bash
+# View logs from systemd timer
+journalctl -u btrfs-churn-mon.service -n 50
+
+# Follow in real-time
+journalctl -u btrfs-churn-mon.service -f
+
+# Persistent log file
+tail -f /var/log/btrfs-churn-mon.log
+```
+
+Each pair processed logs: snapshot names, dump lines, unique paths, total churn bytes, elapsed time.
+
+---
+
+## Exclude Paths from Snapshots
+
+Utility script to exclude directories from btrfs snapshots (reduces churn):
+
+```bash
+# Preview
+sudo scripts/btrfs-exclude-path.sh /var/lib/apt/lists --dry-run
+
+# Execute (creates subvolume + systemd .mount unit)
+sudo scripts/btrfs-exclude-path.sh /var/lib/apt/lists
+
+# Batch (one snapshot, then skip for each)
+sudo btrbk snapshot raiz
+sudo scripts/btrfs-exclude-path.sh /var/lib/apt/lists --no-snapshot
+sudo scripts/btrfs-exclude-path.sh /var/crash --no-snapshot
+sudo scripts/btrfs-exclude-path.sh /var/log/journal --no-snapshot
+```
+
+Config: `etc/btrfs-exclude-path.conf` (see `.example` for all options).
+
+---
+
 ## Project Layout
 
 ```
 bin/
-    btrfs-churn-mon          # CLI entry point
+    btrfs-churn-mon              # CLI entry point
 
 src/
-    __init__.py              # Root guard (assert_not_root)
-    cli.py                   # Typer app (dispatch)
-    config.py                # Configuration (ENV > file > defaults)
-    btrfs.py                 # BtrfsClient class (subprocess interface)
-    parser.py                # Parse btrfs send dump → churn data
-    report.py                # Per-pair report (markdown + JSON)
-    aggregate.py             # Multi-pair aggregate report
-    monitor.py               # State machine (find pairs, update state)
-    install.py               # Installer/uninstaller (systemd, user, sudoers)
+    __init__.py                  # Root guard (assert_not_root)
+    cli.py                       # Typer app (dispatch)
+    config.py                    # Configuration (ENV > file > defaults)
+    btrfs.py                     # BtrfsClient class (subprocess interface)
+    parser.py                    # Parse btrfs send dump → churn data
+    report.py                    # Per-pair report (markdown + JSON)
+    aggregate.py                 # Multi-pair aggregate report
+    monitor.py                   # State machine (find pairs, update state)
+    install.py                   # Installer/uninstaller
+    log.py                       # Logging config (stderr + file)
+
+scripts/
+    btrfs-exclude-path.sh       # Exclude directories from snapshots
 
 install_data/
-    btrfs-churn-mon.service  # Systemd service template
-    btrfs-churn-mon.timer    # Systemd timer template
-    sudoers-btrfs-churn-mon  # Sudoers drop-in template
+    btrfs-churn-mon.service     # Systemd service template
+    btrfs-churn-mon.timer       # Systemd timer template
+    sudoers-btrfs-churn-mon     # Sudoers drop-in template
 
 etc/
-    btrfs-churn-mon.conf         # Runtime config (not installed — stays in repo)
-    btrfs-churn-mon.conf.example # Config example
+    btrfs-churn-mon.conf            # Runtime config
+    btrfs-churn-mon.conf.example    # Config example
+    btrfs-exclude-path.conf.example # Exclude script config example
 
 tests/
-    unit/                    # pytest (152 tests)
+    unit/                        # pytest (170 tests)
 
 docs/
-    ENGINEERING_PLAN.md      # Development roadmap and decisions
-    INSTALL.md               # Detailed installation guide
+    ENGINEERING_PLAN.md          # Development roadmap and decisions
+    INSTALL.md                   # Detailed installation guide
 ```
 
 ---
@@ -149,9 +201,10 @@ SNAPSHOT_FAMILIES=home,raiz
 
 ## Security Model
 
-- Service runs as unprivileged user `btrfs-churn`
+- Service runs as unprivileged user `btrfs-churn` (system user, UID < 1000)
 - Only `btrfs send` / `btrfs receive --dump` escalate via sudoers
 - Root guard: process aborts if run as root (euid == 0)
+- Config and data preserved on uninstall
 
 ---
 
@@ -161,7 +214,7 @@ SNAPSHOT_FAMILIES=home,raiz
 python3 -m pytest
 ```
 
-152 tests covering all modules (unit tests, mocked subprocess).
+170 tests covering all modules (unit tests, mocked subprocess).
 
 ---
 
