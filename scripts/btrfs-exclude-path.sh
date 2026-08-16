@@ -32,6 +32,7 @@ set -euo pipefail
 MOUNT_UNIT_DIR="/etc/systemd/system"
 BTRFS_MOUNT_OPTS="noatime,compress=zstd"
 SUBVOL_PREFIX=""  # e.g. "nosnap" or "no_snap/@"
+SYSTEMD_UNIT_PREFIX=""  # e.g. "nosnap-" → unit: nosnap-var-lib-apt-lists.mount
 
 # --- Load config (if exists) ---
 CONFIG_FILE="/opt/btrfs-churn-mon/etc/btrfs-exclude-path.conf"
@@ -61,12 +62,15 @@ Options:
                   and '@' as name prefix. Examples:
                     --prefix nosnap        → nosnap/var_cache
                     --prefix "no_snap/@"   → no_snap/@var_cache
+  --unit-prefix STR  Prefix for systemd .mount unit filename. Examples:
+                    --unit-prefix "nosnap-" → nosnap-var-cache.mount
   --help          Show this help
 
 Config file: $CONFIG_FILE
-  DEVICE=            Default btrfs device (supports by-id paths)
-  SUBVOL_PREFIX=     Default prefix
-  BTRFS_MOUNT_OPTS=  Mount options (default: noatime,compress=zstd)
+  DEVICE=              Default btrfs device (supports by-id paths)
+  SUBVOL_PREFIX=       Default subvolume prefix
+  SYSTEMD_UNIT_PREFIX= Default unit filename prefix (e.g. "nosnap-")
+  BTRFS_MOUNT_OPTS=    Mount options (default: noatime,compress=zstd)
 
 Examples:
   $(basename "$0") /var/lib/apt/lists
@@ -80,6 +84,7 @@ while [[ $# -gt 0 ]]; do
         --dry-run) DRY_RUN=true; shift ;;
         --device) DEVICE="$2"; shift 2 ;;
         --prefix) SUBVOL_PREFIX="$2"; shift 2 ;;
+        --unit-prefix) SYSTEMD_UNIT_PREFIX="$2"; shift 2 ;;
         --help|-h) usage; exit 0 ;;
         -*) echo "ERROR: unknown option: $1" >&2; exit 1 ;;
         *)
@@ -164,9 +169,15 @@ subvol_parent_dirs() {
 
 path_to_unit_name() {
     # Convert /var/lib/apt/lists → var-lib-apt-lists.mount
-    # systemd requires this naming for mount units.
+    # With SYSTEMD_UNIT_PREFIX="nosnap-" → nosnap-var-lib-apt-lists.mount
+    #
+    # systemd mount units require the name to match the mount path exactly
+    # when Where= is set. However, we use a custom name (prefixed) and
+    # specify Where= explicitly in the unit, which systemd handles correctly.
     local path="$1"
-    echo "$(echo "$path" | sed 's|^/||; s|/|-|g').mount"
+    local base
+    base="$(echo "$path" | sed 's|^/||; s|/|-|g')"
+    echo "${SYSTEMD_UNIT_PREFIX}${base}.mount"
 }
 
 subvol_exists() {

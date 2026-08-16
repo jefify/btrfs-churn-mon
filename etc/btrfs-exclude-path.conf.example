@@ -3,13 +3,62 @@
 # Copy to: /opt/btrfs-churn-mon/etc/btrfs-exclude-path.conf
 #
 # All values can be overridden via command-line flags.
+# Lines starting with # are comments. Empty values = disabled.
 
-# Btrfs device (auto-detected if empty)
-# DEVICE=/dev/dm-0
+# --------------------------------------------------------------------------
+# DEVICE — Btrfs device path
+# --------------------------------------------------------------------------
+# The block device containing the btrfs filesystem.
+# Supports /dev/disk/by-id/... paths for stability across reboots
+# (avoids issues with device reordering in the same volume group).
+# If empty, auto-detected from the target path via df.
+#
+# Examples:
+#   DEVICE=/dev/dm-0
+#   DEVICE=/dev/disk/by-id/dm-uuid-LVM-BXg1fR307zkYtyLLT22Fg1ic4psQ3d7Rg5gzobZHSZQ2wlAR20QfmeZh8hvxCmB3
+#
+# DEVICE=
 
-# Prefix for subvolume names (empty = flat, like var_cache)
-# Example: SUBVOL_PREFIX=nosnap → creates nosnap/var_cache
+# --------------------------------------------------------------------------
+# SUBVOL_PREFIX — Prefix for subvolume names inside btrfs top-level
+# --------------------------------------------------------------------------
+# Controls where the new subvolume is created inside btrfs subvolid=5.
+# Can contain '/' for subdirectories and '@' as name prefix.
+# Intermediate directories are created automatically (mkdir -p).
+#
+# Examples:
+#   (empty)            /var/cache → subvol: var_cache
+#   SUBVOL_PREFIX=nosnap    /var/cache → subvol: nosnap/var_cache
+#   SUBVOL_PREFIX=no_snap/@ /var/cache → subvol: no_snap/@var_cache
+#   SUBVOL_PREFIX=excl/     /var/cache → subvol: excl/var_cache
+#
 # SUBVOL_PREFIX=
 
-# Mount options for the subvolume
+# --------------------------------------------------------------------------
+# SYSTEMD_UNIT_PREFIX — Prefix for systemd .mount unit filenames
+# --------------------------------------------------------------------------
+# Prepended to the generated unit filename. Useful for grouping all
+# exclude-related mounts together in systemctl output.
+#
+# Examples:
+#   (empty)                    /var/cache → var-cache.mount
+#   SYSTEMD_UNIT_PREFIX=nosnap-  /var/cache → nosnap-var-cache.mount
+#   SYSTEMD_UNIT_PREFIX=excl-    /var/cache → excl-var-cache.mount
+#
+# The unit's [Mount] Where= always points to the correct path regardless
+# of the filename prefix.
+#
+# SYSTEMD_UNIT_PREFIX=
+
+# --------------------------------------------------------------------------
+# BTRFS_MOUNT_OPTS — Mount options for the subvolume
+# --------------------------------------------------------------------------
+# Comma-separated btrfs mount options applied to the new subvolume.
+# The subvol= option is added automatically (do not include it here).
+#
+# Common options:
+#   noatime       — don't update access time (performance)
+#   compress=zstd — transparent compression (space saving)
+#   nodatacow     — disable CoW (useful for databases, VMs)
+#
 BTRFS_MOUNT_OPTS="noatime,compress=zstd"
