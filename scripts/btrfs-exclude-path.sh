@@ -33,6 +33,16 @@ MOUNT_UNIT_DIR="/etc/systemd/system"
 BTRFS_MOUNT_OPTS="noatime,compress=zstd"
 SUBVOL_PREFIX=""  # e.g. "nosnap" or "no_snap/@"
 SYSTEMD_UNIT_PREFIX=""  # e.g. "nosnap-" → unit: nosnap-var-lib-apt-lists.mount
+SNAPSHOT=true  # Take btrbk safety snapshot before changes (--no-snapshot to skip)
+
+# BTRBK_MAP: associates mount points to btrbk snapshot_name.
+# Used to snapshot only the affected subvolume instead of all.
+# Format: associative array. Keys = mount point, Values = btrbk snapshot_name.
+# If the target path falls under a key, that snapshot_name is used.
+# If empty or unset, falls back to 'btrbk snapshot' (all subvolumes).
+declare -A BTRBK_MAP
+# Example (set in config file):
+#   BTRBK_MAP=( [/]=raiz [/home]=home )
 
 # --- Load config (if exists) ---
 CONFIG_FILE="/opt/btrfs-churn-mon/etc/btrfs-exclude-path.conf"
@@ -57,6 +67,8 @@ Arguments:
 
 Options:
   --dry-run       Show plan without modifying system
+  --no-snapshot   Skip btrbk safety snapshot (useful when batch-excluding
+                  multiple paths — take one snapshot before, then --no-snapshot)
   --device DEV    Btrfs device path (supports /dev/disk/by-id/... for stability)
   --prefix STR    Prefix for subvolume name. Can include '/' for subdirs
                   and '@' as name prefix. Examples:
@@ -82,6 +94,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run) DRY_RUN=true; shift ;;
+        --no-snapshot) SNAPSHOT=false; shift ;;
         --device) DEVICE="$2"; shift 2 ;;
         --prefix) SUBVOL_PREFIX="$2"; shift 2 ;;
         --unit-prefix) SYSTEMD_UNIT_PREFIX="$2"; shift 2 ;;
@@ -209,17 +222,56 @@ check_open_files() {
     return 0
 }
 
+resolve_btrbk_name() {
+    # Resolve which btrbk snapshot_name to use for a given target path.
+    # Looks up BTRBK_MAP for the longest matching mount point prefix.
+    # e.g. target=/var/lib/apt/lists, map has [/]=raiz [/home]=home → returns "raiz"
+    #
+    # Returns empty string if no match (caller falls back to 'btrbk snapshot' all).
+    local target="$1"
+    local best_match=""
+    local best_len=0
+
+    for mount_point in "${!BTRBK_MAP[@]}"; do
+        # Check if target starts with this mount point
+        if [[ "$target" == "$mount_point"* ]] || [[ "$target" == "$mount_point" ]]; then
+            local len=${#mount_point}
+            if (( len > best_len )); then
+                best_len=$len
+                best_match="$mount_point"
+            fi
+        fi
+    done
+
+    if [[ -n "$best_match" ]]; then
+        echo "${BTRBK_MAP[$best_match]}"
+    fi
+}
+
 run_safety_snapshot() {
     # Run btrbk snapshot to preserve current state before making changes.
-    # This ensures we have a point-in-time recovery if something goes wrong.
-    echo "  Taking safety snapshot via btrbk..."
-    if command -v btrbk &>/dev/null; then
-        btrbk snapshot 2>&1 | tail -3
-        echo "  Safety snapshot complete."
-    else
+    # If BTRBK_MAP is configured, only snapshots the affected subvolume.
+    # Respects SNAPSHOT flag (caller should check before calling).
+    local target="$1"
+
+    if ! command -v btrbk &>/dev/null; then
         echo "  ⚠️  btrbk not found — skipping safety snapshot."
         echo "     Consider: apt install btrbk"
+        return
     fi
+
+    local btrbk_name
+    btrbk_name=$(resolve_btrbk_name "$target")
+
+    if [[ -n "$btrbk_name" ]]; then
+        echo "  Taking safety snapshot: btrbk snapshot $btrbk_name"
+        btrbk snapshot "$btrbk_name" 2>&1 | tail -3
+    else
+        echo "  Taking safety snapshot: btrbk snapshot (all subvolumes)"
+        echo "  (Tip: set BTRBK_MAP in config for selective snapshots)"
+        btrbk snapshot 2>&1 | tail -3
+    fi
+    echo "  Safety snapshot complete."
 }
 
 # --- Main ---
@@ -287,8 +339,10 @@ echo "--- Plan ---"
 echo
 STEP=1
 if [[ "$SUBVOL_EXISTS" == "false" ]]; then
-    echo "  ${STEP}. Take safety snapshot (btrbk)"
-    ((STEP++))
+    if [[ "$SNAPSHOT" == "true" ]]; then
+        echo "  ${STEP}. Take safety snapshot (btrbk)"
+        ((STEP++))
+    fi
     echo "  ${STEP}. Create subvolume: $SUBVOL_NAME"
     ((STEP++))
     echo "  ${STEP}. Copy data: $TARGET/* → subvolume (reflink, no extra disk space)"
@@ -329,8 +383,12 @@ fi
 
 # Execute
 if [[ "$SUBVOL_EXISTS" == "false" ]]; then
-    # Safety snapshot via btrbk
-    run_safety_snapshot
+    # Safety snapshot via btrbk (if enabled)
+    if [[ "$SNAPSHOT" == "true" ]]; then
+        run_safety_snapshot "$TARGET"
+    else
+        echo "  ⏭️  Snapshot skipped (--no-snapshot)"
+    fi
 
     # Create parent directories inside btrfs top-level if needed
     if [[ -n "$PARENT_DIRS" ]]; then

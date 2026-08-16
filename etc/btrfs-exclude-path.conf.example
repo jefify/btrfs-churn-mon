@@ -62,3 +62,44 @@
 #   nodatacow     — disable CoW (useful for databases, VMs)
 #
 BTRFS_MOUNT_OPTS="noatime,compress=zstd"
+
+# --------------------------------------------------------------------------
+# SNAPSHOT — Take a btrbk safety snapshot before making changes
+# --------------------------------------------------------------------------
+# When true (default), runs btrbk snapshot before creating the subvolume
+# and copying data. Provides a recovery point in case something goes wrong.
+#
+# Set to false (or use --no-snapshot flag) when batch-excluding multiple
+# paths in sequence — take ONE snapshot before the batch, then skip for each:
+#
+#   sudo btrbk snapshot raiz
+#   sudo ./btrfs-exclude-path.sh /var/lib/apt/lists --no-snapshot
+#   sudo ./btrfs-exclude-path.sh /var/crash --no-snapshot
+#   sudo ./btrfs-exclude-path.sh /var/log/journal --no-snapshot
+#
+SNAPSHOT=true
+
+# --------------------------------------------------------------------------
+# BTRBK_MAP — Map mount points to btrbk snapshot_name for selective snapshots
+# --------------------------------------------------------------------------
+# By default, 'btrbk snapshot' snapshots ALL configured subvolumes.
+# With BTRBK_MAP, only the affected subvolume is snapshotted.
+#
+# Format: bash associative array. Key = mount point, Value = btrbk snapshot_name.
+# The script matches the target path to the longest matching mount point.
+#
+# Example (from btrbk.conf where subvolume @ has snapshot_name=raiz,
+# and subvolume @home has snapshot_name=home):
+#
+#   declare -A BTRBK_MAP=(
+#       [/]=raiz
+#       [/home]=home
+#   )
+#
+# With this config:
+#   /var/lib/apt/lists → matches / → btrbk snapshot raiz (only @)
+#   /home/downloads    → matches /home → btrbk snapshot home (only @home)
+#
+# If BTRBK_MAP is empty/unset, falls back to 'btrbk snapshot' (all).
+#
+# declare -A BTRBK_MAP=( [/]=raiz [/home]=home )
