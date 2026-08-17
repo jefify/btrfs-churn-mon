@@ -129,10 +129,14 @@ fi
 
 detect_device() {
     # Find the btrfs device for the given path.
-    # Falls back to df if DEVICE is not set.
+    # Uses findmnt (more precise than df for btrfs, handles bind mounts correctly).
+    # Falls back to df if findmnt fails.
     local path="$1"
     local dev
-    dev=$(df --output=source "$path" 2>/dev/null | tail -1)
+    dev=$(findmnt -n -o SOURCE --target "$path" 2>/dev/null | head -1)
+    if [[ -z "$dev" ]]; then
+        dev=$(df --output=source "$path" 2>/dev/null | tail -1)
+    fi
     if [[ -z "$dev" ]] || ! btrfs filesystem show "$dev" &>/dev/null; then
         echo "ERROR: could not detect btrfs device for $path" >&2
         echo "       Specify --device explicitly" >&2
@@ -184,9 +188,12 @@ path_to_unit_name() {
     # Convert /var/lib/apt/lists → var-lib-apt-lists.mount
     # With SYSTEMD_UNIT_PREFIX="nosnap-" → nosnap-var-lib-apt-lists.mount
     #
-    # systemd mount units require the name to match the mount path exactly
-    # when Where= is set. However, we use a custom name (prefixed) and
-    # specify Where= explicitly in the unit, which systemd handles correctly.
+    # NOTE on systemd naming: systemd expects mount unit filenames to match
+    # the escaped path (systemd-escape --path). When using a prefix, the
+    # filename won't match — the mount WORKS (systemd honors Where=), but
+    # `systemctl status var-lib-apt-lists.mount` won't find the prefixed unit.
+    # Use `systemctl status nosnap-var-lib-apt-lists.mount` instead.
+    # For full compat without prefix, leave SYSTEMD_UNIT_PREFIX empty.
     local path="$1"
     local base
     base="$(echo "$path" | sed 's|^/||; s|/|-|g')"
@@ -400,9 +407,11 @@ if [[ "$SUBVOL_EXISTS" == "false" ]]; then
     btrfs subvolume create "$BTRFS_TOPLEVEL/$SUBVOL_NAME"
 
     # Copy data using reflink (btrfs shares blocks — no extra disk space used)
-    if [[ -d "$TARGET" ]] && [[ "$(ls -A "$TARGET" 2>/dev/null)" ]]; then
+    if [[ -d "$TARGET" ]] && [[ -n "$(find "$TARGET" -maxdepth 0 -not -empty 2>/dev/null)" ]]; then
         echo "  Copying data from $TARGET to subvolume (reflink, no extra space)..."
         TEMP_MOUNT=$(mktemp -d)
+        # Update trap to also clean up TEMP_MOUNT if cp fails
+        trap 'umount "$TEMP_MOUNT" 2>/dev/null; rmdir "$TEMP_MOUNT" 2>/dev/null; umount "$BTRFS_TOPLEVEL" 2>/dev/null; rmdir "$BTRFS_TOPLEVEL" 2>/dev/null' EXIT
         mount -o "subvol=$SUBVOL_NAME,$BTRFS_MOUNT_OPTS" "$DEVICE" "$TEMP_MOUNT"
 
         # cp --reflink=auto: if btrfs supports it (yes), shares blocks without copying
@@ -410,6 +419,8 @@ if [[ "$SUBVOL_EXISTS" == "false" ]]; then
 
         umount "$TEMP_MOUNT"
         rmdir "$TEMP_MOUNT"
+        # Restore original trap (TEMP_MOUNT cleaned up)
+        trap 'umount "$BTRFS_TOPLEVEL" 2>/dev/null; rmdir "$BTRFS_TOPLEVEL" 2>/dev/null' EXIT
         echo "  Data copied (reflink — blocks shared, no extra disk usage)."
     else
         echo "  Target empty or doesn't exist — no data to copy."
